@@ -8,11 +8,14 @@ from app.sender import (
     LATEST_OUTGOING_MESSAGE,
     SEND_BUTTONS,
     _click_and_confirm_sticker,
+    _confirm_outgoing_message,
     _confirm_sticker_sent,
     _publish_ready,
+    _restore_composer,
     _sticker_resource_key,
     _trigger_send,
     send_message,
+    send_text,
 )
 
 
@@ -36,6 +39,8 @@ async def test_random_message_delegates_to_selected_choice(monkeypatch) -> None:
     text = Message(type="text", content="你好")
     message = Message(type="random", choices=(text,))
     monkeypatch.setattr("app.sender.random.choice", lambda choices: choices[0])
+    monkeypatch.setattr("app.sender._mark_latest_outgoing_message", AsyncMock(return_value=("anchor", "")))
+    monkeypatch.setattr("app.sender._confirm_outgoing_message", AsyncMock())
 
     await send_message(page, chat, message, {})
 
@@ -194,6 +199,7 @@ async def test_sticker_confirmation_waits_for_new_matching_outgoing_message() ->
         "anchor",
         "old-content",
         "resource-key",
+        "",
     ]
     page.wait_for_timeout.assert_awaited_once_with(3_000)
 
@@ -240,3 +246,106 @@ async def test_sticker_resource_key_ignores_signed_query_string() -> None:
     )
 
     assert await _sticker_resource_key(item) == "sticker-key"
+
+
+@pytest.mark.asyncio
+async def test_confirm_outgoing_message_waits_for_expected_text() -> None:
+    page = MagicMock()
+    page.wait_for_function = AsyncMock()
+    page.wait_for_timeout = AsyncMock()
+    latest_group = MagicMock()
+    latest = MagicMock()
+    latest_group.first = latest
+    marker_group = MagicMock()
+    marker = MagicMock()
+    marker_group.first = marker
+    marker.count = AsyncMock(return_value=0)
+    latest.locator.return_value = marker_group
+    anchors = MagicMock()
+    anchors.evaluate_all = AsyncMock()
+    page.locator.side_effect = lambda selector: latest_group if selector == LATEST_OUTGOING_MESSAGE else anchors
+
+    await _confirm_outgoing_message(page, ("anchor", "old-content"), "文字", expected_text="测试文字")
+
+    assert page.wait_for_function.await_args.kwargs["arg"] == [
+        LATEST_OUTGOING_MESSAGE,
+        "anchor",
+        "old-content",
+        "",
+        "测试文字",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_send_text_confirms_outgoing_message_without_retry(monkeypatch) -> None:
+    page = MagicMock()
+    page.keyboard.insert_text = AsyncMock()
+    page.wait_for_function = AsyncMock()
+    page.wait_for_timeout = AsyncMock()
+    editor = MagicMock()
+    editor.click = AsyncMock()
+    editor.page = page
+    chat = MagicMock()
+    chat.message_input = AsyncMock(return_value=editor)
+    calls = {"trigger": 0, "confirm": 0}
+
+    async def fake_mark(_page):
+        return ("anchor", "old-content")
+
+    async def fake_trigger(_page):
+        calls["trigger"] += 1
+
+    async def fake_confirm(_page, before, label, resource_key="", expected_text=""):
+        calls["confirm"] += 1
+        assert before == ("anchor", "old-content")
+        assert label == "文字"
+        assert expected_text == "你好"
+
+    monkeypatch.setattr("app.sender._mark_latest_outgoing_message", fake_mark)
+    monkeypatch.setattr("app.sender._trigger_send", fake_trigger)
+    monkeypatch.setattr("app.sender._confirm_outgoing_message", fake_confirm)
+
+    await send_text(chat, "你好")
+
+    assert calls["trigger"] == 1
+    assert calls["confirm"] == 1
+
+
+@pytest.mark.asyncio
+async def test_send_text_raises_when_confirmation_fails(monkeypatch) -> None:
+    page = MagicMock()
+    page.keyboard.insert_text = AsyncMock()
+    page.wait_for_function = AsyncMock()
+    page.wait_for_timeout = AsyncMock()
+    editor = MagicMock()
+    editor.click = AsyncMock()
+    editor.page = page
+    chat = MagicMock()
+    chat.message_input = AsyncMock(return_value=editor)
+
+    monkeypatch.setattr("app.sender._mark_latest_outgoing_message", AsyncMock(return_value=("anchor", "")))
+    monkeypatch.setattr("app.sender._trigger_send", AsyncMock())
+
+    async def fail(_page, *_args, **_kwargs):
+        raise PageOperationError("文字已发送，但没有检测到新的已发送消息")
+
+    monkeypatch.setattr("app.sender._confirm_outgoing_message", fail)
+
+    with pytest.raises(PageOperationError, match="没有检测到新的已发送消息"):
+        await send_text(chat, "你好")
+
+
+@pytest.mark.asyncio
+async def test_restore_composer_presses_escape_and_focuses(monkeypatch) -> None:
+    page = MagicMock()
+    page.keyboard.press = AsyncMock()
+    editor = MagicMock()
+    editor.click = AsyncMock()
+    editor.focus = AsyncMock()
+    monkeypatch.setattr("app.sender.first_visible", AsyncMock(return_value=editor))
+
+    await _restore_composer(page)
+
+    page.keyboard.press.assert_awaited_once_with("Escape")
+    editor.click.assert_awaited_once()
+    editor.focus.assert_awaited_once()

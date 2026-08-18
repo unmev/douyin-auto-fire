@@ -98,3 +98,53 @@ async def test_browser_start_failure_still_notifies(monkeypatch, tmp_path) -> No
 
     results = notify.await_args.args[3]
     assert [(result.target, result.status) for result in results] == [("运行检查", "failed")]
+
+
+@pytest.mark.asyncio
+async def test_waits_between_consecutive_messages_for_same_friend(monkeypatch, tmp_path) -> None:
+    settings = _settings(tmp_path)
+    messages = (Message(type="text", content="一"), Message(type="text", content="二"))
+    task = TaskConfig(
+        task_id="daily-streak",
+        timezone="Asia/Shanghai",
+        targets=(Target(name="好友A", messages=messages),),
+        stickers={},
+        interval_min=0.5,
+        interval_max=0.5,
+        continue_on_error=True,
+        prevent_duplicates=False,
+    )
+    page = MagicMock()
+    session = SimpleNamespace(page=page, context=MagicMock())
+
+    @asynccontextmanager
+    async def fake_open_douyin(_settings):
+        yield session
+
+    history = MagicMock()
+    history.run_date.return_value = "2026-08-09"
+    chat = MagicMock()
+    chat.open_target = AsyncMock()
+    send_message = AsyncMock()
+    sleeps = []
+
+    async def fake_sleep(seconds):
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(main_module, "load_settings", lambda _env=None: settings)
+    monkeypatch.setattr(main_module, "load_task", lambda _settings: task)
+    monkeypatch.setattr(main_module, "History", MagicMock(return_value=history))
+    monkeypatch.setattr(main_module, "open_douyin", fake_open_douyin)
+    monkeypatch.setattr(main_module, "open_private_messages", AsyncMock())
+    monkeypatch.setattr(main_module, "DouyinChat", MagicMock(return_value=chat))
+    monkeypatch.setattr(main_module, "verify_login", AsyncMock())
+    monkeypatch.setattr(main_module, "send_message", send_message)
+    monkeypatch.setattr("asyncio.sleep", fake_sleep)
+    monkeypatch.setattr(main_module, "_screenshot", AsyncMock(return_value=None))
+    monkeypatch.setattr(main_module, "_write_results", MagicMock())
+    monkeypatch.setattr(main_module, "_notify_dingtalk", AsyncMock())
+    monkeypatch.setattr(main_module, "_configure_logging", lambda _path: None)
+
+    assert await main_module.run() == 0
+    assert send_message.await_count == 2
+    assert sleeps == [0.5]

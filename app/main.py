@@ -83,6 +83,8 @@ async def run(dry_run: bool = False, env_file: str | None = None) -> int:
                                 if task.prevent_duplicates:
                                     history.mark_success(key)
                                 sent += 1
+                                if message_index < len(target.messages) - 1:
+                                    await asyncio.sleep(random.uniform(task.interval_min, task.interval_max))
                         results.append(TargetResult(target=target.name, status="success", sent=sent))
                     except (AuthenticationError, RiskControlError) as exc:
                         LOGGER.exception("处理好友时登录状态失效: %s", target.name)
