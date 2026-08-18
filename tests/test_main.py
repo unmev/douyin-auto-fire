@@ -63,7 +63,7 @@ async def test_authentication_failure_stops_remaining_targets_and_notifies(monke
     monkeypatch.setattr(main_module, "_screenshot", AsyncMock(return_value=None))
     monkeypatch.setattr(main_module, "_write_results", MagicMock())
     monkeypatch.setattr(main_module, "_notify_dingtalk", notify)
-    monkeypatch.setattr(main_module, "_configure_logging", lambda _path: None)
+    monkeypatch.setattr(main_module, "_configure_logging", lambda _path, _aliases=None: None)
 
     with pytest.raises(AuthenticationError, match="登录失效"):
         await main_module.run()
@@ -91,7 +91,7 @@ async def test_browser_start_failure_still_notifies(monkeypatch, tmp_path) -> No
     monkeypatch.setattr(main_module, "open_douyin", broken_open_douyin)
     monkeypatch.setattr(main_module, "_write_results", MagicMock())
     monkeypatch.setattr(main_module, "_notify_dingtalk", notify)
-    monkeypatch.setattr(main_module, "_configure_logging", lambda _path: None)
+    monkeypatch.setattr(main_module, "_configure_logging", lambda _path, _aliases=None: None)
 
     with pytest.raises(RuntimeError, match="浏览器启动失败"):
         await main_module.run()
@@ -143,7 +143,7 @@ async def test_waits_between_consecutive_messages_for_same_friend(monkeypatch, t
     monkeypatch.setattr(main_module, "_screenshot", AsyncMock(return_value=None))
     monkeypatch.setattr(main_module, "_write_results", MagicMock())
     monkeypatch.setattr(main_module, "_notify_dingtalk", AsyncMock())
-    monkeypatch.setattr(main_module, "_configure_logging", lambda _path: None)
+    monkeypatch.setattr(main_module, "_configure_logging", lambda _path, _aliases=None: None)
 
     assert await main_module.run() == 0
     assert send_message.await_count == 2

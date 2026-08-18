@@ -1,4 +1,6 @@
 .env
+.env.account*
+!.env.account.example
 .venv/
 __pycache__/
 *.py[cod]
@@ -6,5 +8,7 @@ __pycache__/
 artifacts/*
 !artifacts/.gitkeep
 config/tasks.json
+config/tasks/
 config.json
 storage-state.json
+storage_state/

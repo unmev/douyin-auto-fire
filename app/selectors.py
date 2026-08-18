@@ -19,6 +19,8 @@ RISK_MARKERS = (
 SEARCH_INPUTS = (
     'input[placeholder*="搜索"]',
     '[role="textbox"][placeholder*="搜索"]',
+    'input[aria-label*="搜索"]',
+    '[role="textbox"][aria-label*="搜索"]',
 )
 CHAT_PANEL_MARKERS = (
     '[class*="RightPanelHeader"]',

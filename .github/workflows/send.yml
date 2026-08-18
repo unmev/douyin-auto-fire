@@ -37,6 +37,74 @@ jobs:
       - name: Write protected configuration
         shell: bash
         run: printf '%s' "$DOUYIN_CONFIG" > config.json
+      - name: Write multi-account configuration
+        shell: bash
+        env:
+          COOKIE_1: ${{ secrets.DOUYIN_COOKIE_ACCOUNT1 }}
+          CONFIG_1: ${{ secrets.DOUYIN_CONFIG_ACCOUNT1 }}
+          COOKIE_2: ${{ secrets.DOUYIN_COOKIE_ACCOUNT2 }}
+          CONFIG_2: ${{ secrets.DOUYIN_CONFIG_ACCOUNT2 }}
+          COOKIE_3: ${{ secrets.DOUYIN_COOKIE_ACCOUNT3 }}
+          CONFIG_3: ${{ secrets.DOUYIN_CONFIG_ACCOUNT3 }}
+          COOKIE_4: ${{ secrets.DOUYIN_COOKIE_ACCOUNT4 }}
+          CONFIG_4: ${{ secrets.DOUYIN_CONFIG_ACCOUNT4 }}
+          COOKIE_5: ${{ secrets.DOUYIN_COOKIE_ACCOUNT5 }}
+          CONFIG_5: ${{ secrets.DOUYIN_CONFIG_ACCOUNT5 }}
+          LEGACY_COOKIE: ${{ secrets.DOUYIN_COOKIE }}
+          LEGACY_CONFIG: ${{ secrets.DOUYIN_CONFIG }}
+        run: |
+          mkdir -p config/tasks
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          if not any(os.environ.get(f"COOKIE_{i}") for i in range(1, 6)):
+              # 没有配置任何多账号 Secret（DOUYIN_COOKIE_ACCOUNTn）：
+              # 保持旧单账号模式，不生成 accounts.json。
+              print("未配置多账号 Secret，继续使用旧单账号模式")
+              raise SystemExit(0)
+
+          accounts = []
+          for index in range(1, 6):
+              if index == 1 and not os.environ.get("COOKIE_1") and not os.environ.get("CONFIG_1"):
+                  # 没有配置 DOUYIN_COOKIE_ACCOUNT1 时，旧版 DOUYIN_COOKIE /
+                  # DOUYIN_CONFIG 自动作为账号1，方便老用户直接追加新账号。
+                  cookie = os.environ.get("LEGACY_COOKIE")
+                  config = os.environ.get("LEGACY_CONFIG")
+              else:
+                  cookie = os.environ.get(f"COOKIE_{index}")
+                  config = os.environ.get(f"CONFIG_{index}")
+              if not cookie and not config:
+                  continue
+              if not cookie or not config:
+                  raise SystemExit(
+                      f"账号 account{index} 的 DOUYIN_COOKIE_ACCOUNT{index} 与 "
+                      f"DOUYIN_CONFIG_ACCOUNT{index} 必须同时配置"
+                  )
+              # 提前校验，出错时直接指出是哪个 Secret，避免任务执行时才报错
+              try:
+                  json.loads(cookie)
+              except json.JSONDecodeError as exc:
+                  raise SystemExit(f"DOUYIN_COOKIE_ACCOUNT{index} 不是有效 JSON: {exc}") from exc
+              try:
+                  json.loads(config)
+              except json.JSONDecodeError as exc:
+                  raise SystemExit(f"DOUYIN_CONFIG_ACCOUNT{index} 不是有效 JSON: {exc}") from exc
+              env_file = f".env.account{index}"
+              # Cookie 用 JSON 字符串转义后写入，dotenv 可精确还原，
+              # 兼容多行 Cookie JSON 与 # 等特殊字符
+              Path(env_file).write_text(
+                  f"DOUYIN_COOKIE={json.dumps(cookie)}\nTASK_CONFIG=config/tasks/account{index}.json\n",
+                  encoding="utf-8",
+              )
+              Path(f"config/tasks/account{index}.json").write_text(config, encoding="utf-8")
+              accounts.append({"id": f"account{index}", "enabled": True, "env_file": env_file})
+          Path("config/accounts.json").write_text(
+              json.dumps({"accounts": accounts}, ensure_ascii=False, indent=2),
+              encoding="utf-8",
+          )
+          PY
       - name: Run
         shell: bash
         run: |

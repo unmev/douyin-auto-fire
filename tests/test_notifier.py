@@ -66,6 +66,20 @@ def test_dingtalk_webhook_and_secret_must_be_configured_together(monkeypatch) ->
         load_settings()
 
 
+def test_markdown_shows_real_name_even_with_alias() -> None:
+    results = [
+        TargetResult(target="张三", status="success", sent=1, target_alias="好友01"),
+        TargetResult(target="李四", status="failed", sent=0, error="搜索不到目标好友", target_alias="好友02"),
+    ]
+
+    _, markdown = build_dingtalk_markdown("daily-streak", False, results, [])
+
+    assert "张三" in markdown
+    assert "李四" in markdown
+    assert "好友01" not in markdown
+    assert "好友02" not in markdown
+
+
 def test_markdown_escapes_dynamic_text_and_limits_large_lists() -> None:
     results = [
         TargetResult(target=f"好友*[{index}]", status="failed", error="`失败`" * 200)

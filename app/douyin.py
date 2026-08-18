@@ -37,7 +37,7 @@ class DouyinChat:
                     await self.page.wait_for_timeout(RETRY_DELAY_MS)
         if last_error is not None:
             raise last_error
-        raise PageOperationError(f"打开聊天失败: {name}")
+        raise PageOperationError("打开聊天失败")
 
     async def _open_target_once(self, name: str) -> None:
         search = await first_visible(self.page, SEARCH_INPUTS, self.timeout_ms)
@@ -48,10 +48,7 @@ class DouyinChat:
 
         result = await self._search_result(name)
         if result is None:
-            # Save the visible text in the exception for selector troubleshooting without
-            # exposing cookies or storage state.
-            visible_text = (await self.page.locator("body").inner_text())[:500].replace("\n", " ")
-            raise PageOperationError(f"搜索不到好友: {name}；当前页面文字: {visible_text}")
+            raise PageOperationError("搜索不到目标好友")
         await result.click(force=True)
         await self._confirm_opened(name)
 
@@ -158,7 +155,7 @@ class DouyinChat:
                 except Exception:
                     continue
         return PageOperationError(
-            f"点击搜索结果后无法确认聊天已打开: {name}（输入框: {'有' if composer_visible else '无'}）"
+            f"点击搜索结果后无法确认聊天已打开（输入框: {'有' if composer_visible else '无'}）"
         )
 
     async def _composer_visible(self) -> bool:

@@ -91,6 +91,7 @@ tzdata>=2025.2
 | `DINGTALK_SECRET` | 钉钉机器人 Secret | 否 |
 
 钉钉通知不用就不要配置；需要使用时，两个钉钉 Secret 必须同时填写。
+**若有多个账号就是用下面[多账号](#10-多账号可选)的配置文件变量名称**  网页操作起来还是很简单的
 
 ### DOUYIN_CONFIG 示例
 
@@ -220,6 +221,66 @@ GitHub Actions 不会自动扫码登录，也不会绕过验证码或安全验�
 - `traces/`
 
 失败 Artifact 保留 3 天。截图和日志可能包含聊天隐私，请勿公开分享。
+
+## 9. 隐私保护
+
+为了保护好友隐私，GitHub Actions 日志及公开诊断文件不会显示真实好友昵称。
+
+好友将按照任务配置顺序显示为：
+
+```text
+好友01
+好友02
+好友03
+```
+
+实际发送和好友搜索仍使用真实昵称。
+
+钉钉私人通知仍显示真实好友名称。
+
+失败诊断 Artifact 保留 3 天。
+
+## 10. 多账号（可选）
+
+> 升级后**完全向后兼容**：没有多账号配置时自动使用旧单账号模式，
+> 现有的 `DOUYIN_COOKIE` / `DOUYIN_CONFIG` Secret 与 `python run.py` 保持不变。
+
+
+
+### GitHub Actions 使用
+
+无需修改 workflow。在仓库设置中按账号添加 Secret（可选，旧用户不配置
+即保持单账号模式）。每个账号两个 Secret，内容与旧的 `DOUYIN_COOKIE` /
+`DOUYIN_CONFIG` 完全一致：
+
+| Secret | 内容 |
+| --- | --- |
+| `DOUYIN_COOKIE_ACCOUNT1` | 账号1 的 Cookie JSON 数组 |
+| `DOUYIN_CONFIG_ACCOUNT1` | 账号1 的完整发送配置 JSON |
+| `DOUYIN_COOKIE_ACCOUNT2` | 账号2 的 Cookie JSON 数组 |
+| `DOUYIN_CONFIG_ACCOUNT2` | 账号2 的完整发送配置 JSON |
+| `DOUYIN_COOKIE_ACCOUNT3` ~ `ACCOUNT5` | 以此类推，当前最多 5 个账号 |
+
+workflow 会自动为每个配齐了 Cookie 与 Config 的账号生成
+`config/accounts.json` 与对应的 `.env.accountN`，无需手动维护这些文件。
+要求：
+
+- 账号从 `ACCOUNT1` 开始连续编号，允许跳过（例如只配置 ACCOUNT1 和 ACCOUNT3）。
+- 某个账号只配置了 Cookie 或 Config 其中一个，workflow 会直接报错提示，
+  防止账号被静默漏跑。
+- 旧的 `DOUYIN_COOKIE` / `DOUYIN_CONFIG` Secret 无需删除；检测到多账号
+  配置时自动使用多账号模式。
+- **老用户追加账号**：没有配置 `DOUYIN_COOKIE_ACCOUNT1` / `DOUYIN_CONFIG_ACCOUNT1`
+  时，旧的 `DOUYIN_COOKIE` / `DOUYIN_CONFIG` 会自动作为账号1，因此老用户
+  只需要直接添加 `ACCOUNT2`（及以上）的 Secret 即可。
+  建议之后有空把旧配置复制成 `ACCOUNT1` 对，避免将来删除旧 Secret 时账号1
+  从清单中消失。
+
+### 失败隔离与退出码
+
+- 某个账号失败（Cookie 失效、好友不存在、发送异常等）**不影响其他账号**，串行继续执行。
+- 全部账号成功 → 退出码 `0`；存在任意失败 → 退出码 `1`（与单账号语义一致）。
+- 每个账号的钉钉通知使用各自 env 中的 `DINGTALK_WEBHOOK` / `DINGTALK_SECRET`。
 
 ## 注意
 

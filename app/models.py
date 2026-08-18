@@ -64,3 +64,4 @@ class TargetResult:
     status: Literal["success", "failed", "skipped", "duplicate", "unknown"]
     sent: int = 0
     error: str | None = None
+    target_alias: str | None = None

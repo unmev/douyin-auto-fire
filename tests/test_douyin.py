@@ -7,6 +7,25 @@ from app.selectors import CHAT_PANEL_MARKERS, MESSAGE_INPUTS
 
 
 @pytest.mark.asyncio
+async def test_search_failure_raises_without_page_text_or_real_name(monkeypatch) -> None:
+    page = MagicMock()
+    page.wait_for_timeout = AsyncMock()
+    search = MagicMock()
+    search.click = AsyncMock()
+    search.fill = AsyncMock()
+    monkeypatch.setattr("app.douyin.first_visible", AsyncMock(return_value=search))
+    chat = DouyinChat(page)
+    chat._search_result = AsyncMock(return_value=None)
+
+    with pytest.raises(PageOperationError, match="搜索不到目标好友") as exc_info:
+        await chat._open_target_once("张三")
+
+    message = str(exc_info.value)
+    assert "当前页面文字" not in message
+    assert "张三" not in message
+
+
+@pytest.mark.asyncio
 async def test_search_result_accepts_visible_partial_text() -> None:
     page = MagicMock()
     rows = MagicMock()
