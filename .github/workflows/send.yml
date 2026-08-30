@@ -1,7 +1,7 @@
 name: Send Douyin Messages
 
 on:
-schedule:
+  schedule:
     - cron: '30 0 * * *'   # 每天 00:30 UTC = 每天 08:30 Asia/Shanghai
   workflow_dispatch:
     inputs:
