@@ -8,7 +8,7 @@ on:
       dry_run:
         description: Only verify login and friends without sending
         type: boolean
-        default: false
+        default:  true
   #使用github actions的日程 可以把下面的这三行代码注释删掉  用外部的不用管 
   # schedule:
   #   - cron: "0 0 * * *"
