@@ -1,7 +1,7 @@
 name: Send Douyin Messages
 
 on:
-    schedule:
+schedule:
     - cron: '30 0 * * *'   # 每天 00:30 UTC = 每天 08:30 Asia/Shanghai
   workflow_dispatch:
     inputs:
@@ -9,10 +9,10 @@ on:
         description: Only verify login and friends without sending
         type: boolean
         default: true
-  #使用github actions的日程 可以把下面的这三行代码注释删掉  用外部的不用管 
-  # schedule:
-  #   - cron: "0 0 * * *"
-  #     timezone: "Asia/Shanghai"
+# 使用github actions的日程 可以把下面的这三行代码注释删掉  用外部的不用管 
+# schedule:
+#   - cron: "0 0 * * *"
+#     timezone: "Asia/Shanghai"
 
 concurrency:
   group: douyin-daily-sender
