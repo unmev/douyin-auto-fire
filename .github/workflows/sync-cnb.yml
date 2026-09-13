@@ -1,3 +1,4 @@
+on: []
 name: Sync Code to CNB
 
 on:
