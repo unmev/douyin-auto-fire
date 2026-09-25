@@ -17,6 +17,14 @@ from app.config import ConfigError, load_settings, load_task
 from app.douyin import DouyinChat, PageOperationError
 from app.errors import classify_error, get_retry_strategy, should_stop_all_tasks
 from app.history import AlreadyRunningError, History, run_lock
+from app.interrupt import (
+    ExecutionInterruptedError,
+    ExecutionTimeoutError,
+    check_interrupted,
+    reset_interrupted,
+    run_with_timeout_and_interrupt,
+    signal_interrupt_handler,
+)
 from app.metrics import Metrics, HistoricalMetrics, format_metrics_summary
 from app.models import Settings, TargetResult
 from app.notifier import send_dingtalk_notification, send_webhook_notification
@@ -24,14 +32,34 @@ from app.privacy import RedactingFormatter, build_target_aliases, redact_text, t
 from app.progress import create_single_run_progress
 from app.sender import send_message
 
-
 LOGGER = logging.getLogger("douyin_sender")
 
 
-async def run(dry_run: bool = False, env_file: str | None = None) -> int:
+async def run(
+    dry_run: bool = False,
+    env_file: str | None = None,
+    timeout: float | None = None,
+    fail_fast: bool = False,
+) -> int:
+    reset_interrupted()
     settings = load_settings(env_file)
     task = load_task(settings)
-    settings.artifacts_dir.mkdir(parents=True, exist_ok=True)
+    effective_timeout = timeout if timeout is not None else task.timeout_seconds
+    async def _run_impl() -> int:
+        return await _run_core(settings, task, dry_run=dry_run, fail_fast=fail_fast)
+
+    if effective_timeout is not None and effective_timeout > 0:
+        LOGGER.info("已启用执行超时保护: 最大运行时间 %.1f 秒", effective_timeout)
+        return await run_with_timeout_and_interrupt(_run_impl(), timeout_seconds=effective_timeout)
+    return await _run_impl()
+
+
+async def _run_core(
+    settings: Settings,
+    task: Any,
+    dry_run: bool = False,
+    fail_fast: bool = False,
+) -> int:
     aliases = build_target_aliases(task.targets)
     _configure_logging(settings.artifacts_dir, aliases)
 
@@ -88,6 +116,7 @@ async def run(dry_run: bool = False, env_file: str | None = None) -> int:
                 chat = DouyinChat(page, timeout_ms=int(task.target_open_timeout_seconds * 1000))
 
                 for index, target in enumerate(task.targets):
+                    check_interrupted()
                     sent = 0
                     alias = target_alias(index)
                     target_progress.start_target(alias)
@@ -117,6 +146,7 @@ async def run(dry_run: bool = False, env_file: str | None = None) -> int:
                                     history.reserve(key)
 
                                 # 发送单条消息并计时
+                                check_interrupted()
                                 msg_start = time.time()
                                 await verify_login(page, timeout_ms=3_000)
                                 await send_message(page, chat, message, task.stickers)
@@ -174,6 +204,11 @@ async def run(dry_run: bool = False, env_file: str | None = None) -> int:
                         target_progress.finish_target("failed")
 
                         # 检查是否应该停止所有任务
+                        if fail_fast:
+                            LOGGER.warning("--fail-fast 模式已生效，遇到错误立即中断后续任务")
+                            fatal_error = exc
+                            break
+
                         if should_stop_all_tasks(exc):
                             LOGGER.warning("检测到严重错误，停止处理剩余好友")
                             fatal_error = exc
@@ -181,7 +216,6 @@ async def run(dry_run: bool = False, env_file: str | None = None) -> int:
 
                         if not task.continue_on_error:
                             break
-
                     multi_stage.update_progress(1)
 
                     if index < len(task.targets) - 1 and not dry_run:
@@ -236,21 +270,35 @@ def main() -> int:
     try:
         settings = load_settings(args.env_file)
         with run_lock(settings.artifacts_dir / "run.lock"):
-            return asyncio.run(run(dry_run=args.dry_run, env_file=args.env_file))
+            with signal_interrupt_handler():
+                return asyncio.run(
+                    run(
+                        dry_run=args.dry_run,
+                        env_file=args.env_file,
+                        timeout=args.timeout,
+                        fail_fast=args.fail_fast,
+                    )
+                )
     except (ConfigError, AuthenticationError, RiskControlError, SearchBoxNotReadyError, AlreadyRunningError) as exc:
         print(f"错误: {exc}")
         return 2
-    except KeyboardInterrupt:
-        print("任务已取消")
+    except ExecutionTimeoutError as exc:
+        print(f"执行超时中断: {exc}", file=sys.stderr)
+        return 124
+    except (KeyboardInterrupt, ExecutionInterruptedError):
+        print("\n任务已由用户或系统中断取消")
         return 130
 
 
 def _parse_cli_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="向多个抖音好友发送配置的消息")
-    parser.add_argument("--dry-run", action="store_true", help="只验证登录和好友，不发送消息")
+    parser.add_argument("--dry-run", action="store_true", help="只验证登录和好友，不发送消息（测试模式）")
     parser.add_argument("--env-file", help="指定 .env 文件路径")
-    return parser.parse_args()
-
+    parser.add_argument("--auth-file", help="指定 auth.json 凭证文件路径")
+    parser.add_argument("--timeout", type=float, default=None, help="最大执行超时秒数，超时后自动中断并退出")
+    parser.add_argument("--fail-fast", action="store_true", help="遇到首个目标失败或配置错误时立即中断退出")
+    args, _ = parser.parse_known_args()
+    return args
 
 def _configure_logging(
     artifacts_dir: Path,

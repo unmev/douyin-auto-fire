@@ -12,8 +12,8 @@ from dotenv import dotenv_values, load_dotenv
 from app.accounts import load_accounts
 from app.config import ConfigError, load_settings
 from app.history import run_lock
+from app.interrupt import ExecutionInterruptedError, ExecutionTimeoutError, signal_interrupt_handler
 from app.main import LOGGER, _configure_logging, _parse_cli_args, run
-
 
 # 单账号模式的旧环境变量。多账号模式下由各账号的 env 文件提供，
 # 启动时先清掉进程环境中的旧值，避免残留值被所有账号继承。
@@ -51,17 +51,35 @@ def run_all_accounts() -> int:
                 settings = load_settings(None)
                 _configure_logging(settings.artifacts_dir, label=account.id, reset=True)
                 with run_lock(settings.artifacts_dir / "run.lock"):
-                    code = asyncio.run(run(dry_run=args.dry_run))
+                    with signal_interrupt_handler():
+                        import inspect
+                        run_params = inspect.signature(run).parameters
+                        run_kwargs = {"dry_run": args.dry_run}
+                        if "timeout" in run_params and hasattr(args, "timeout"):
+                            run_kwargs["timeout"] = args.timeout
+                        if "fail_fast" in run_params and hasattr(args, "fail_fast"):
+                            run_kwargs["fail_fast"] = args.fail_fast
+                        code = asyncio.run(run(**run_kwargs))
             status = "success" if code == 0 else "failed"
             summary.append((account.id, status, None))
             LOGGER.info("执行完成: %s", status)
+        except (KeyboardInterrupt, ExecutionInterruptedError) as exc:
+            LOGGER.warning("多账号任务被中断终止，停止执行剩余账号: %s", exc)
+            summary.append((account.id, "interrupted", type(exc).__name__))
+            print("\n多账号执行已由用户或系统中断终止")
+            return 130
+        except ExecutionTimeoutError as exc:
+            summary.append((account.id, "timeout", type(exc).__name__))
+            LOGGER.error("账号 [%s] 执行超时中断: %s", account.id, exc)
+            if getattr(args, "fail_fast", False):
+                LOGGER.warning("--fail-fast 模式已生效，超时后停止后续账号执行")
+                return 124
         except Exception as exc:
-            # 异常消息可能包含好友真名（如 Playwright 定位器超时），此处只记录
-            # 异常类型；完整脱敏详情已由 run() 写入该账号的 run.log。
             summary.append((account.id, "failed", type(exc).__name__))
             LOGGER.exception("执行失败: %s", exc)
-
-    _configure_logging(Path("artifacts"), label=None, reset=True)
+            if getattr(args, "fail_fast", False):
+                LOGGER.warning("--fail-fast 模式已生效，遇到失败停止后续账号执行")
+                return 1
     for account_id, status, error in summary:
         detail = f" - {error}" if error else ""
         LOGGER.info("[%s] 结果: %s%s", account_id, status, detail)

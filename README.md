@@ -81,6 +81,48 @@ docker compose up -d
 
 通知功能完全可选，不配置不影响消息发送。
 
+
+## 🔐 系统登录鉴权与安全
+
+本项目具备防破解身份鉴权系统，用于在任务执行前保护运行凭证与操作权限：
+
+- **首次启动初始化**：首次启动时自动引导配置用户名与密码（用户名 3-32 位，密码至少 8 位且包含字母与数字），凭证采用 **PBKDF2-HMAC-SHA256 (600,000 次哈希迭代 + 32 字节独立加盐)** 存储，绝不存留明文。
+- **防暴力破解保护**：恒定时间比对防御时序侧信道攻击；连续输错 5 次密码将自动锁定 5 分钟，拒绝继续尝试。
+- **忘记密码修改命令**：如果忘记密码，可通过专用管理命令随时重置并解除锁定状态：
+  ```bash
+  python run.py change-password
+  # 或指定用户名与新密码重置：
+  python run.py change-password --username admin --new-password YourNewPassword123
+  ```
+- **非交互式/自动化支持**：在定时任务、Docker 或 CI/CD 无人值守环境中，可通过环境变量或命令行进行初始化与鉴权：
+  - 环境变量方式（配置在 `.env` 中）：
+    ```bash
+    APP_AUTH_USERNAME=admin
+    APP_AUTH_PASSWORD=YourSecurePassword123
+    ```
+  - 命令行一键初始化：
+    ```bash
+    python run.py init-auth --username admin --password YourSecurePassword123
+    ```
+
+## 🛑 任务中断与超时保护 (防配置错误卡死)
+
+针对配置错误（例如好友名称不存在、选择器失效、网络波动）可能导致的无限等待或重复重试，系统提供了完善的中断与超时保护机制：
+
+- **超时自动中断 (`--timeout`)**：支持为测试（`--dry-run`）与真实发送设置全局最大执行时间，超时后优雅打断、释放浏览器并退出（返回状态码 124）：
+  ```bash
+  # 测试模式限时 30 秒，超时自动中断
+  python run.py --dry-run --timeout 30
+
+  # 真实执行限时 60 秒
+  python run.py --timeout 60
+  ```
+  *(也可通过环境变量 `TASK_TIMEOUT=60` 或在 `config.json` 中配置 `"timeout_seconds": 60` 生效)*
+- **遇到错误立即中断 (`--fail-fast`)**：开启后若遇到首个目标失败或配置异常，立即中断后续好友的处理，方便快速排查配置问题：
+  ```bash
+  python run.py --dry-run --fail-fast
+  ```
+- **安全信号中断 (Ctrl+C)**：随时可通过键盘 `Ctrl+C` 或 SIGINT/SIGTERM 中断任务，系统将安全关闭浏览器会话、释放 `run.lock` 文件锁，并在多账号模式下立即停止后续所有账号的执行（返回状态码 130）。
 ## 🧰 技术栈
 
 | 类别 | 内容 |

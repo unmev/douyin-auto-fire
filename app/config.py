@@ -85,6 +85,21 @@ def load_task(settings: Settings) -> TaskConfig:
     )
     if target_open_timeout_seconds <= 0:
         raise ConfigError("target_open_timeout_seconds 必须大于 0")
+
+    raw_timeout = raw.get("timeout_seconds")
+    env_timeout = os.environ.get("TASK_TIMEOUT") or os.environ.get("RUN_TIMEOUT")
+    if env_timeout:
+        try:
+            timeout_seconds: float | None = float(env_timeout)
+        except ValueError as exc:
+            raise ConfigError("环境变量 TASK_TIMEOUT / RUN_TIMEOUT 必须是有效数值") from exc
+    elif raw_timeout is not None:
+        timeout_seconds = _number(raw_timeout, "timeout_seconds")
+        if timeout_seconds <= 0:
+            raise ConfigError("timeout_seconds 必须大于 0")
+    else:
+        timeout_seconds = None
+
     task = TaskConfig(
         task_id=_non_empty_string(raw.get("task_id", "daily-streak"), "task_id"),
         timezone=_non_empty_string(raw.get("timezone", "Asia/Shanghai"), "timezone"),
@@ -96,6 +111,7 @@ def load_task(settings: Settings) -> TaskConfig:
         prevent_duplicates=raw.get("prevent_duplicates", False),
         target_open_retries=target_open_retries,
         target_open_timeout_seconds=target_open_timeout_seconds,
+        timeout_seconds=timeout_seconds,
     )
     if not isinstance(task.continue_on_error, bool):
         raise ConfigError("continue_on_error 必须是布尔值")

@@ -43,7 +43,7 @@ class TaskConfig:
     prevent_duplicates: bool
     target_open_retries: int = 1
     target_open_timeout_seconds: float = 15.0
-
+    timeout_seconds: float | None = None
 
 @dataclass(frozen=True)
 class Settings:
