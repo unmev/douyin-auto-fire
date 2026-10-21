@@ -12,13 +12,10 @@ if [ "$RUN_ON_START" = "true" ]; then
   python run.py || true
 fi
 
-cat > /etc/cron.d/douyin-auto-fire <<EOF
-SHELL=/bin/sh
-PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-${CRON_SCHEDULE} root cd /app && /usr/local/bin/python run.py >> /proc/1/fd/1 2>> /proc/1/fd/2
-EOF
-
-chmod 0644 /etc/cron.d/douyin-auto-fire
+# cron 启动的作业不会继承容器自身的环境变量，容器里通过 compose 传入的
+# DOUYIN_COOKIE / TASK_CONFIG / ARTIFACTS_DIR / HEADLESS 等在定时任务里都会丢失，
+# 导致任务必然失败。这里把容器环境写成 shell 脚本，并让 crontab 在执行前加载它。
+python /app/docker/setup_cron.py --schedule "$CRON_SCHEDULE"
 
 printf '[docker] cron schedule: %s\n' "$CRON_SCHEDULE"
 printf '[docker] timezone: %s\n' "${TZ:-Asia/Shanghai}"

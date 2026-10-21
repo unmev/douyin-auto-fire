@@ -13,3 +13,5 @@ storage-state.json
 storage_state/
 artifacts/
 *.log
+# cron 定时任务的环境变量文件（含 Cookie，禁止打包进镜像）
+docker/task-env.sh

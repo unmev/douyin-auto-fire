@@ -12,3 +12,5 @@ config/tasks/
 config.json
 storage-state.json
 storage_state/
+# cron 定时任务的环境变量文件（含 Cookie，禁止提交）
+docker/task-env.sh

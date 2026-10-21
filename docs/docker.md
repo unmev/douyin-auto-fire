@@ -149,6 +149,12 @@ RUN_ON_START=true
 RUN_ON_START=false
 ```
 
+> `.env` 里的变量既对 `RUN_ON_START=true` 的启动运行生效，也对每天定时的
+> cron 任务生效。容器启动时 `docker/entrypoint.sh` 会把容器环境写进
+> `/run/douyin-auto-fire/env.sh`，cron 在执行任务前会加载它，
+> 因此定时任务和手动执行（`docker exec`）拿到的环境变量完全一致。
+> 详见 [15. 常见问题](#15-常见问题)。
+
 ---
 
 ## 6. 消息通知（可选）
@@ -609,6 +615,42 @@ ghcr.io/unmev/douyin-auto-fire:latest
 ```
 
 GitHub Actions 会在相关代码更新时自动构建并同时推送到 GHCR 和 CNB。CNB 同时提供国内下载 `docker-compose.yml` 的地址，Docker 用户无需克隆完整源码。
+
+---
+
+## 15. 常见问题
+
+### 定时任务每次都报「必须配置 DOUYIN_STORAGE_STATE 或 DOUYIN_COOKIE」
+
+容器里的定时任务由 cron 拉起，而 **cron 启动的作业不会继承容器自身的环境变量**：
+作业能拿到的变量只有 crontab 里显式写出来的部分，加上 cron 自己设置的
+`HOME` / `LOGNAME` / `PWD` / `SHELL` / `PATH`。
+
+所以 compose 里通过 `environment:` 传入的 `DOUYIN_COOKIE`、`TASK_CONFIG`、
+`ARTIFACTS_DIR`、`HEADLESS`，以及镜像里定义的 `PLAYWRIGHT_BROWSERS_PATH`、
+`PYTHONUNBUFFERED` 在定时任务里会全部丢失，定时任务必然失败；
+而手动执行（`docker exec`）或 `RUN_ON_START=true` 却一切正常，
+看起来像是 Cookie 过期或被风控。
+
+镜像里的 `docker/entrypoint.sh` 会在容器启动时把容器环境写进
+`/run/douyin-auto-fire/env.sh`，并让 crontab 在执行任务前加载它，
+保证定时任务和手动执行的环境变量完全一致。
+
+可以这样确认定时任务实际拿到的环境变量：
+
+```bash
+docker exec douyin-auto-fire cat /run/douyin-auto-fire/env.sh
+docker exec douyin-auto-fire cat /etc/cron.d/douyin-auto-fire
+```
+
+如果升级镜像前定时任务一直失败，重新创建容器即可生效：
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+> `/run/douyin-auto-fire/env.sh` 里包含 Cookie 等敏感信息，权限为 `0600`，
+> 容器重启时会自动重新生成，不需要手工维护。
 
 ---
 
