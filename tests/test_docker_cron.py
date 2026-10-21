@@ -57,6 +57,14 @@ def test_env_file_skips_empty_values() -> None:
     assert "export HEADLESS=true" in content
 
 
+def test_env_file_skips_invalid_shell_variable_names() -> None:
+    content = setup_cron.render_env_file({"BASH_FUNC_x%%": "() { :; }", "BAD-NAME": "x", "GOOD_NAME": "y"})
+
+    assert "export GOOD_NAME=y" in content
+    assert "BASH_FUNC" not in content
+    assert "BAD-NAME" not in content
+
+
 def test_env_file_quotes_json_values() -> None:
     cookie = '[{"name":"sessionid","value":"abc"}]'
 

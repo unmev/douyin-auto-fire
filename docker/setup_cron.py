@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shlex
 from collections.abc import Mapping
 from pathlib import Path
@@ -41,6 +42,9 @@ CRON_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 # 由 shell / cron 自身维护的变量，写进环境文件没有意义。
 IGNORED_ENV_NAMES = frozenset({"PWD", "OLDPWD", "SHLVL", "_"})
+
+# 只有合法的 shell 变量名才能 export，否则会生成无法被 source 的脚本。
+VALID_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 ENV_FILE_HEADER = (
     "# 由 docker/setup_cron.py 生成，请勿手动修改。\n"
@@ -59,6 +63,8 @@ def render_env_file(environ: Mapping[str, str]) -> str:
     lines = [ENV_FILE_HEADER.rstrip("\n")]
     for name in sorted(environ):
         if name in IGNORED_ENV_NAMES:
+            continue
+        if not VALID_NAME.match(name):
             continue
         value = environ[name]
         if not value:
