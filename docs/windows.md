@@ -430,6 +430,17 @@ C:\douyin-auto-fire
 
 单账号和多账号都使用同一个 `run.py`，不需要为每个账号创建多个计划任务。
 
+### 自动识别待续火花好友（可选）
+
+如果希望每天运行前从私信列表中识别灰色火花，只向当天需要续火花的好友发送原生表情，可以使用项目提供的 PowerShell 包装脚本：
+
+```powershell
+.\\login-local.ps1
+.\\run-streaks-local.ps1
+```
+
+`run-streaks-local.ps1` 会先扫描私信列表，再生成本地 `config.json` 并调用现有发送流程。它不会把好友名单、登录状态、日志、截图或 Trace 写入 Git；这些本地运行文件已在 `.gitignore` 中排除。Windows 任务计划程序中应将“程序或脚本”设置为 `pwsh.exe`，参数设置为 `-File "D:\\douyin-auto-fire\\run-streaks-local.ps1"`，并把“起始于”设置为项目根目录。
+
 ---
 
 ## 14. 测试任务计划程序

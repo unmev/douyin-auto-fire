@@ -2,6 +2,8 @@
 .env.account*
 !.env.account.example
 .venv/
+.pip-cache/
+.playwright-browsers/
 __pycache__/
 *.py[cod]
 .pytest_cache/
