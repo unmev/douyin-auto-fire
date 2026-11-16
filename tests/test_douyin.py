@@ -167,6 +167,27 @@ async def test_search_result_rejects_containing_name_for_group_rule() -> None:
 
 
 @pytest.mark.asyncio
+async def test_search_result_matches_remark_rendered_on_second_line() -> None:
+    # Douyin renders a friend remark on the line below the nickname. The
+    # configured target can be that visible remark, so one complete line must
+    # match without accepting the longer "张张1".
+    page, buttons = _search_page(["ᅟᅟ ᅟ ᅟ\n张张"])
+
+    result = await DouyinChat(page)._search_result("张张")
+
+    assert result is buttons[0]
+
+
+@pytest.mark.asyncio
+async def test_search_result_rejects_longer_remark_line() -> None:
+    page, _buttons = _search_page(["ᅟᅟ ᅟ ᅟ\n张张1"])
+
+    result = await DouyinChat(page)._search_result("张张")
+
+    assert result is None
+
+
+@pytest.mark.asyncio
 async def test_open_target_retries_after_failed_first_attempt() -> None:
     page = MagicMock()
     page.wait_for_timeout = AsyncMock()
@@ -392,6 +413,38 @@ async def test_chat_open_error_rejects_when_header_name_absent() -> None:
     assert "无法确认聊天已打开" in str(error)
 
 
+@pytest.mark.asyncio
+async def test_chat_open_error_accepts_remark_appended_to_nickname() -> None:
+    # The chat header concatenates the nickname and remark on one line and puts
+    # the streak count on the next line.
+    page = _chat_page("ᅟᅟ   ᅟ   ᅟ张张\n478")
+
+    error = await DouyinChat(page)._chat_open_error("张张")
+
+    assert error is None
+
+
+@pytest.mark.asyncio
+async def test_chat_open_error_rejects_longer_remark_in_header() -> None:
+    page = _chat_page("ᅟᅟ   ᅟ   ᅟ张张1")
+
+    error = await DouyinChat(page)._chat_open_error("张张")
+
+    assert isinstance(error, PageOperationError)
+
+
+@pytest.mark.asyncio
+async def test_chat_open_error_rejects_hidden_stale_remark_suffix() -> None:
+    # A hidden stale node ending with the remark must not confirm a visible
+    # header for another friend.
+    page = _chat_page("其他好友", stale_name="ᅟᅟ   ᅟ   ᅟ张张")
+
+    error = await DouyinChat(page)._chat_open_error("张张")
+
+    assert isinstance(error, PageOperationError)
+    assert "无法确认聊天已打开" in str(error)
+
+
 # Direct unit tests for the standalone group-suffix matcher. The friend exact
 # matcher (_text_equals) stays strict; only this independent helper accepts a
 # trailing "(N)" / "（N）" member count, and nothing else.
@@ -436,6 +489,14 @@ def test_group_count_suffix_matches_rejects_longer_name() -> None:
     # The core test/test1 safety property: expected "test" must not match the
     # longer bare name "test1" (no member-count brackets to legitimize it).
     assert not _group_count_suffix_matches("test1", "test")
+
+
+def test_group_count_suffix_matches_remark_line_with_suffix() -> None:
+    assert _group_count_suffix_matches("ᅟᅟ ᅟ ᅟ\n4161(7)", "4161")
+
+
+def test_group_count_suffix_matches_rejects_longer_multiline_line() -> None:
+    assert not _group_count_suffix_matches("ᅟᅟ ᅟ ᅟ\n4161(7)abc", "4161")
 
 
 def test_group_count_suffix_matches_escapes_expected_regex_meta() -> None:

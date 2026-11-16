@@ -207,6 +207,8 @@ class DouyinChat:
                     continue
                 if await _visible_exact_or_group_text_in(header, title_selectors, name):
                     return None
+                if await _visible_suffix_text_in(header, title_selectors, name):
+                    return None
 
         composer_visible = await self._composer_visible()
         return PageOperationError(
@@ -263,6 +265,29 @@ async def _visible_group_text_locator(
     return None
 
 
+async def _visible_suffix_text_in(
+    container: Locator, selectors: tuple[str, ...], expected: str
+) -> bool:
+    # The chat header concatenates the nickname and remark into one line
+    # (e.g. "<invisible nickname><remark>"), with the streak count on the next
+    # line. The search result was already exact-matched, so a visible title
+    # line ending with the target confirms the same recipient.
+    expected = expected.strip()
+    for selector in selectors:
+        nodes = container.locator(selector)
+        for index in range(await nodes.count()):
+            node = nodes.nth(index)
+            try:
+                if not await node.is_visible():
+                    continue
+                actual = await node.inner_text(timeout=500)
+            except Exception:
+                continue
+            if any(line.strip().endswith(expected) for line in actual.splitlines()):
+                return True
+    return False
+
+
 async def _visible_exact_or_group_text_in(
     container: Locator, selectors: tuple[str, ...], expected: str
 ) -> bool:
@@ -289,10 +314,16 @@ async def _has_exact_text(locators: Locator, expected: str) -> bool:
 
 
 async def _text_equals(locator: Locator, expected: str) -> bool:
+    # Search results can render the remark on a separate line below the
+    # nickname. Match any complete line so a configured remark identifies the
+    # row without weakening per-line exact matching ("test" never matches
+    # "test1").
     try:
-        return (await locator.inner_text(timeout=500)).strip() == expected
+        actual = await locator.inner_text(timeout=500)
     except Exception:
         return False
+    expected = expected.strip()
+    return any(line.strip() == expected for line in actual.splitlines())
 
 
 # Matches a group chat display name: the configured target name optionally
@@ -305,12 +336,17 @@ _GROUP_COUNT_SUFFIX_RE_TEMPLATE = r"{name}\s*[\(（]\s*\d+\s*[\)）]"
 
 
 def _group_count_suffix_matches(actual: str, expected: str) -> bool:
-    actual = actual.strip()
     expected = expected.strip()
-    if actual == expected:
-        return True
     pattern = _GROUP_COUNT_SUFFIX_RE_TEMPLATE.format(name=re.escape(expected))
-    return re.fullmatch(pattern, actual) is not None
+    for line in actual.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if line == expected:
+            return True
+        if re.fullmatch(pattern, line) is not None:
+            return True
+    return False
 
 
 async def _group_name_matches(locator: Locator, expected: str) -> bool:
