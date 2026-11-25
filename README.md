@@ -13,7 +13,8 @@
 
 通过模拟浏览器操作，可以按照配置自动向指定好友发送文字、图片或抖音原生表情，并支持多种运行方式。
 
-如果只是想快速使用，推荐 **GitHub Actions**：不需要自己购买服务器，也不需要电脑长期保持开机。已有 Linux 服务器或 NAS 的用户推荐使用 **Docker**，也可以使用传统 Python + systemd 方式部署到云服务器，或者直接在 Windows 电脑上运行。
+> [!IMPORTANT]
+> **当前推荐在自己的本地电脑上运行本项目。** 近期抖音安全风控较为严格，GitHub Actions 托管 Runner、云厂商服务器（VPS / ECS）等环境可能无法正常登录或发送消息，目前不推荐将其作为主要运行方式。即使在本地运行，也无法保证始终成功；遇到安全验证时请停止任务，由本人完成验证。
 
 > ⚠️ 本项目使用 Cookie / Storage State 作为登录凭证。请只保存在安全位置，不要提交到公开仓库，也不要分享给他人。
 
@@ -38,13 +39,13 @@
 
 ### ☁️ [GitHub Actions 部署 →](docs/github-actions.md)
 
-**推荐大多数用户使用。** 无需服务器，电脑也不需要长期在线，Fork 后配置 Secrets 即可每天自动运行。
+**目前不推荐使用。** 该部署教程暂时保留，但受抖音风控影响，云端运行的可用性无法保证。
 
 包含 Cookie 获取、配置生成、GitHub Secrets、Dry Run、定时任务、多账号和失败诊断等完整图文步骤。
 
 ### 🐳 [Docker 部署 →](docs/docker.md)
 
-**推荐已有 Linux 服务器、NAS、1Panel 或宝塔环境的用户使用。** 镜像已经包含 Python、Playwright 和 Chromium，只需要在宿主机保存 `config.json`、`cookie.json` 和日志目录。
+适合已有本地 Linux 主机或 NAS 的用户；不推荐部署在云厂商服务器上。 镜像已经包含 Python、Playwright 和 Chromium，只需要在宿主机保存 `config.json`、`cookie.json` 和日志目录。
 
 默认镜像：
 
@@ -60,13 +61,13 @@ docker compose up -d
 
 ### 🖥️ [云服务器部署 →](docs/server.md)
 
-适合希望使用传统 Python + systemd 方式部署的 Linux VPS / 云服务器用户。
+该部署方式仅作为历史参考。目前不推荐使用 Linux VPS 或其他云厂商服务器运行本项目。
 
 使用 Python + Playwright + Headless Chromium 运行，并通过 `systemd Timer` 每天自动执行。教程包含环境安装、Cookie 配置、Dry Run、systemd 定时、日志查看和项目更新。
 
 ### 🪟 [Windows 电脑部署 →](docs/windows.md)
 
-适合想先在自己的电脑上运行或长期使用 Windows 电脑挂机的用户。
+**当前首选部署方式。** 推荐在自己的 Windows 电脑上运行；定时执行时需要电脑处于开机且可运行任务的状态。
 
 支持直接运行项目自带的扫码登录脚本生成 `storage-state.json`，也可以使用 Cookie，并可通过 Windows 任务计划程序每天自动运行。
 
